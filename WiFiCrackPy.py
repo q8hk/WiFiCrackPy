@@ -15,6 +15,7 @@ parser.add_argument('-i')
 parser.add_argument('-p')
 parser.add_argument('-d', action='store_false')
 parser.add_argument('-o', action='store_true')
+parser.add_argument('-r')
 args = parser.parse_args()
 
 
@@ -67,10 +68,10 @@ def capture_network(bssid, ssid, channel):
 
     print('\nHandshake ready for cracking...\n')
 
-    crack_capture()
+    crack_capture(ssid)
 
 
-def crack_capture():
+def crack_capture(ssid):
     if args.m is None:
         print(tabulate([[1, 'Dictionary'], [2, 'Brute-force'], [3, 'Manual']], headers=['Number', 'Mode']))
         method = int(input('\nSelect an attack mode: '))
@@ -82,16 +83,19 @@ def crack_capture():
     elif method == 1 and args.w is not None:
         wordlist = args.w
 
-    if method == 1:
-        subprocess.run(['hashcat', '-m', '22000', 'capture.hc22000', wordlist] + ['-O'] * args.o)
+    if method == 1 and (args.r is None):
+        subprocess.run(['sudo','hashcat', '-m', '22000', str(ssid)+'.hc22000', wordlist] + ['-O'] * args.o)
+    elif method == 1 and (args.r is not None):
+        rule = args.r
+        subprocess.run(['sudo','hashcat', '-m', '22000', str(ssid)+'.hc22000','-r', str(rule), wordlist] + ['-O'] * args.o)
     elif method == 2:
         if args.p is None:
             pattern = input('\nInput a brute-force pattern: ')
         else:
             pattern = args.p
-        subprocess.run(['hashcat', '-m', '22000', '-a', '3', 'capture.hc22000', pattern] + ['-O'] * args.o)
+        subprocess.run(['sudo','hashcat', '-m', '22000', '-a', '3', str(ssid)+'.hc22000', pattern] + ['-O'] * args.o)
     else:
-        print('\nRun hashcat against: capture.hc22000')
+        print('\nRun hashcat against: '+str(ssid)+'.hc22000')
 
 
 f = Figlet(font='big')
