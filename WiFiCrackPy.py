@@ -61,9 +61,9 @@ def capture_network(bssid, ssid, channel):
 
     print('\nInitiating zizzania to capture handshake...\n')
 
-    subprocess.run(['sudo', expanduser('~') + '/zizzania/src/zizzania', '-i', iface, '-b', bssid, '-w', 'capture.pcap', '-q'] + ['-n'] * args.d)
+    subprocess.run(['sudo', expanduser('~') + '/zizzania/src/zizzania', '-i', iface, '-b', bssid, '-w', str(ssid)+'.pcap', '-q'] + ['-n'] * args.d)
 
-    subprocess.run(['hcxpcapngtool', '-o', 'capture.hc22000', 'capture.pcap'], stdout=subprocess.PIPE)
+    subprocess.run(['hcxpcapngtool', '-o', str(ssid)+'.hc22000', str(ssid)+'.pcap'], stdout=subprocess.PIPE)
 
     print('\nHandshake ready for cracking...\n')
 
