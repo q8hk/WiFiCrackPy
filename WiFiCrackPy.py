@@ -45,7 +45,11 @@ def scan_networks():
 
     print(list)
 
-    x = int(input('\nSelect a network to crack: '))
+    x = input('\nSelect a network to crack - (or press r to refresh): ')
+    if x == 'r':
+        scan_networks()
+    else:
+        x = int(x)
     capture_network(networks[x]['bssid'], networks[x]['ssid'], networks[x]['channel'])
 
 
