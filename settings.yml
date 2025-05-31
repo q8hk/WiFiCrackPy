@@ -1,0 +1,16 @@
+# Tool paths
+paths:
+  hashcat: "hashcat"  # Default assumes hashcat is in PATH
+  wordlists: "C:/Tools/SecLists/Passwords"  # Default SecLists location
+  hcxtools: "hcxpcapngtool"  # Default assumes hcxtools is in PATH
+
+# Attack settings
+hashcat:
+  default_wordlist: "rockyou.txt"  # Default wordlist to use
+  attack_mode: 0  # Default to dictionary attack
+  hash_mode: 22000  # WPA-PBKDF2-PMKID+EAPOL hash mode
+
+# Capture settings
+capture:
+  timeout: 300  # Timeout in seconds for handshake capture
+  channel_hop_interval: 2  # Channel hopping interval in seconds

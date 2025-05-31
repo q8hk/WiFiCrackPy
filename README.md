@@ -2,16 +2,34 @@
 
 WiFiCrackPy demonstrates some of the security flaws associated with WPA(2) networks by performing simple and efficient cracking. The tool is for educational purposes and should not be misused.
 
-The script captures the necessary Wi-Fi packets associated with WPA(2) handshakes using [`zizzania`](https://github.com/cyrus-and/zizzania), processes them with [`hcxpcapngtool`](https://github.com/ZerBea/hcxtools), and then utilises [`hashcat`](https://github.com/hashcat/hashcat) to extract the hashed passkey.
+The script captures the necessary Wi-Fi packets associated with WPA(2) handshakes using platform-specific tools, processes them with [`hcxpcapngtool`](https://github.com/ZerBea/hcxtools), and then utilises [`hashcat`](https://github.com/hashcat/hashcat) to extract the hashed passkey.
 
 ## Prerequisites
 
-You must have `python3` installed. You will need to install any other outstanding requirements:
+You must have `python3` installed. Additional requirements depend on your operating system:
 
+### macOS
 | Command | Installation |
 | --- | --- |
 | `hashcat`, `libpcap`, `wget`, `hcxpcapngtool` | Install via [brew](https://brew.sh) by running `brew install hashcat libpcap wget hcxtools` |
-| `~/zizzania/src/zizzania` | Clone [this](https://github.com/cyrus-and/zizzania) repository then run `make -f config.Makefile && make -j "$(sysctl -n hw.logicalcpu)"` from inside the directory |
+| `~/zizzania/src/zizzania` | Clone [this](https://github.com/cyrus-and/zizzania) repository then run `make -f config.Makefile && make -j "$(sysctl -n hw.logicalcpu)"` |
+
+### Windows
+| Command | Installation |
+| --- | --- |
+| `Wireshark/TShark` | Download and install from [Wireshark](https://www.wireshark.org/download.html) |
+| `hashcat` | Download from [hashcat](https://hashcat.net/hashcat/) and add to PATH |
+| `hcxtools` | Download from [hcxtools](https://github.com/ZerBea/hcxtools/releases) and add to PATH |
+| `Python requirements` | Run `pip install -r requirements.txt` |
+
+### Linux/Debian
+| Command | Installation |
+| --- | --- |
+| `wireless-tools` | `sudo apt-get install wireless-tools` |
+| `hashcat` | `sudo apt-get install hashcat` |
+| `hcxtools` | `sudo apt-get install hcxtools` |
+| `libpcap` | `sudo apt-get install libpcap-dev` |
+| `Python requirements` | Run `pip install -r requirements.txt` |
 
 ## Compatibility issues
 

