@@ -2,6 +2,7 @@
 import platform
 import subprocess
 import os
+import shutil
 from core.utils import print_progress
 
 class HandshakeCapturer:
