@@ -5,9 +5,11 @@ import os
 from pathlib import Path
 
 class HashcatCracker:
-    def __init__(self, hashcat_path, wordlist_path):
+    def __init__(self, hashcat_path, wordlist_path, dry_run=False):
         self.hashcat_path = hashcat_path
         self.wordlist_path = wordlist_path
+        self.dry_run = dry_run
+        self.runner = self._mock_run if dry_run else subprocess.run
         if not os.path.exists(self.wordlist_path):
             print(f"Warning: Default wordlist not found at {self.wordlist_path}")
         
@@ -57,9 +59,12 @@ class HashcatCracker:
             return
 
         print_progress(f"Running: {' '.join(cmd)}")
-        subprocess.run(cmd)
+        self.runner(cmd)
         
         if os.path.exists(result_file) and os.path.getsize(result_file) > 0:
             print_progress(f"Cracking completed! Results saved to: {result_file}")
         else:
             print_progress("Cracking completed but no password found.")
+
+    def _mock_run(self, cmd, *args, **kwargs):
+        print(f"Mock subprocess.run: {cmd}")

@@ -6,9 +6,11 @@ import shutil
 from core.utils import print_progress
 
 class HandshakeCapturer:
-    def __init__(self, interface):
+    def __init__(self, interface, dry_run=False):
         self.os = platform.system().lower()
         self.interface = interface
+        self.dry_run = dry_run
+        self.runner = self._mock_run if dry_run else subprocess.run
 
     def capture(self, network):
         ssid = network['ssid']
@@ -21,19 +23,22 @@ class HandshakeCapturer:
 
         if self.os == "darwin":
             zizzania = os.path.expanduser('~/zizzania/src/zizzania')
-            subprocess.run(['sudo', zizzania, '-i', self.interface, '-b', bssid, '-q', '-w', pcap_file])
+            self.runner(['sudo', zizzania, '-i', self.interface, '-b', bssid, '-q', '-w', pcap_file])
         elif self.os == "linux":
             # Use zizzania if available, else fallback to tcpdump
             if shutil.which('zizzania'):
-                subprocess.run(['sudo', 'zizzania', '-i', self.interface, '-b', bssid, '-q', '-w', pcap_file])
+                self.runner(['sudo', 'zizzania', '-i', self.interface, '-b', bssid, '-q', '-w', pcap_file])
             else:
-                subprocess.run(['sudo', 'tcpdump', '-i', self.interface, '-w', pcap_file, 'ether proto 0x888e']) # 802.1X packets
+                self.runner(['sudo', 'tcpdump', '-i', self.interface, '-w', pcap_file, 'ether proto 0x888e']) # 802.1X packets
         elif self.os == "windows":
-            subprocess.run(['dumpcap', '-i', self.interface, '-w', pcap_file])
+            self.runner(['dumpcap', '-i', self.interface, '-w', pcap_file])
         else:
             raise RuntimeError("Unsupported OS for capture.")
 
         print_progress("Converting capture to hashcat format...")
-        subprocess.run(['hcxpcapngtool', '-o', hc22000_file, pcap_file])
+        self.runner(['hcxpcapngtool', '-o', hc22000_file, pcap_file])
         print_progress("Handshake conversion complete.")
         return hc22000_file
+
+    def _mock_run(self, cmd, *args, **kwargs):
+        print(f"Mock subprocess.run: {cmd}")

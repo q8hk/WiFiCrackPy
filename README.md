@@ -1,6 +1,10 @@
 # WiFiCrackPy
 
-WiFiCrackPy demonstrates some of the security flaws associated with WPA(2) networks by performing simple and efficient cracking. The tool is for educational purposes and should not be misused.
+WiFiCrackPy demonstrates some of the security flaws associated with WPA(2) networks by performing simple and efficient cracking. The tool is for **educational purposes** and should not be misused.
+
+## Disclaimer
+
+The software is intended only for **authorized security testing** on networks you own or have explicit permission to test. When running the tool you must type `AGREE` to acknowledge this disclaimer before any action takes place.
 
 The script captures the necessary Wi-Fi packets associated with WPA(2) handshakes using platform-specific tools, processes them with [`hcxpcapngtool`](https://github.com/ZerBea/hcxtools), and then utilises [`hashcat`](https://github.com/hashcat/hashcat) to extract the hashed passkey.
 
@@ -44,6 +48,8 @@ git clone https://github.com/phenotypic/WiFiCrackPy.git
 pip3 install -r requirements.txt
 ```
 
+The default wordlist setting assumes `rockyou.txt` resides in `C:/Tools/SecLists/Passwords`. If this file isn't present, edit `settings.yml` or use the `-w` flag to provide your own list.
+
 Run from the same directory with:
 ```
 python3 WiFiCrackPy.py
@@ -60,6 +66,8 @@ The script is fairly easy to use, simply run it using the command above and ente
 | `-p <pattern>` | Pattern: Define a brute-force pattern in advance (script will prompt you if required) |
 | `-o` | Optimised: Enable optimised kernels for `hashcat` |
 | `-d` | Deauthentication: Activates zizzania's deauthentication feature to force a handshake (do not misuse) |
+| `--dry-run` | Run with dummy data and mocked system commands |
+| `--check-deps` | Check required external tools and exit |
 
 After running the script, you will be asked to choose a network to crack
 
@@ -68,3 +76,14 @@ Following the selection of a network, you may have to wait for a while for a han
 Once a handshake is captured, `hashcat` can be used to crack the Wi-Fi password. This step may take quite a while depending on several factors including your Mac's processing power and the attack method chosen. If successful, you will be presented with the password for the target network.
 
 WiFiCrackPy retains the handshake in its directory if you would like to perform another type of attack against the capture.
+
+### Dry run example
+
+To see the workflow without executing any external commands, run:
+
+```
+python3 WiFiCrackPy.py --dry-run
+```
+
+This uses dummy network data and prints the commands that would normally be executed.
+
