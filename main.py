@@ -20,6 +20,7 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('-i', '--interface', type=str, help='Wi-Fi interface to use')
     parser.add_argument('--check-deps', action='store_true', help='Check required dependencies and exit')
+    parser.add_argument('--dry-run', action='store_true', help='Run with mocked commands and dummy data')
     args = parser.parse_args()
 
     if args.check_deps:
@@ -30,21 +31,38 @@ def main():
     if not check_dependencies(DEPENDENCIES):
         sys.exit(1)
 
-    scanner = NetworkScanner()
-    networks = scanner.scan()
-    if not networks:
-        print("No networks found.")
-        sys.exit(1)
-    choice = prompt_select([n['ssid'] for n in networks], "Select a network to capture handshake: ")
-    network = networks[choice]
+    if args.dry_run:
+        networks = [{
+            'ssid': 'TestNet',
+            'bssid': 'AA:BB:CC:DD:EE:FF',
+            'channel': '6',
+            'security': 'WPA2'
+        }]
+        print_progress("Using dummy network data for dry run")
+        network = networks[0]
+    else:
+        scanner = NetworkScanner()
+        networks = scanner.scan()
+        if not networks:
+            print("No networks found.")
+            sys.exit(1)
+        choice = prompt_select([n['ssid'] for n in networks], "Select a network to capture handshake: ")
+        network = networks[choice]
 
-    capturer = HandshakeCapturer(scanner.interface if not args.interface else args.interface)
+    iface = None
+    if args.dry_run:
+        iface = 'wlan0'
+    else:
+        iface = scanner.interface if not args.interface else args.interface
+
+    capturer = HandshakeCapturer(iface, dry_run=args.dry_run)
     hc22000_file = capturer.capture(network)
     print_progress(f"Handshake saved as {hc22000_file}")
 
     cracker = HashcatCracker(
         hashcat_path=settings.hashcat_path,
-        wordlist_path=settings.default_wordlist
+        wordlist_path=settings.default_wordlist,
+        dry_run=args.dry_run
     )
     cracker.crack(hc22000_file)
 
