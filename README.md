@@ -65,6 +65,6 @@ After running the script, you will be asked to choose a network to crack
 
 Following the selection of a network, you may have to wait for a while for a handshake to occur naturally on the target network (i.e. for a device to (re)connect to the network) unless you are using the `-d` flag which will force a handshake to hasten the process.
 
-Once a handshake is captured, `hashcat` can be used to crack the Wi-Fi password. This step may take quite a while depending on several factors including your Mac's processing power and the attack method chosen. If successfull, you will be presented with the password for the target network.
+Once a handshake is captured, `hashcat` can be used to crack the Wi-Fi password. This step may take quite a while depending on several factors including your Mac's processing power and the attack method chosen. If successful, you will be presented with the password for the target network.
 
 WiFiCrackPy retains the handshake in its directory if you would like to perform another type of attack against the capture.
