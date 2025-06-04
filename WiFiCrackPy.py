@@ -1,11 +1,14 @@
+import sys
 import subprocess
-import argparse
-import re
 import platform
+import re
+import argparse  # Add this import
 from prettytable import PrettyTable
 from tabulate import tabulate
 from os.path import expanduser
 from pyfiglet import Figlet
+import os
+import glob
 
 # Platform specific configurations
 PLATFORM = platform.system().lower()
@@ -46,8 +49,61 @@ parser.add_argument('-p')
 parser.add_argument('-d', action='store_false')
 parser.add_argument('-o', action='store_true')
 parser.add_argument('-r')
+parser.add_argument('--check-deps', action='store_true', help='Check required external tools and exit')
+parser.add_argument('--resume', nargs='?', const=True, help='Resume cracking with existing capture files. If no SSID provided, lists available captures')
 args = parser.parse_args()
 
+def check_dependencies():
+    """Check for required external tools based on platform"""
+    required_tools = {
+        'darwin': ['hashcat', 'airport', 'hcxpcapngtool', 'zizzania'],
+        'linux': ['hashcat', 'iwlist', 'iwconfig', 'hcxpcapngtool'],
+        'windows': ['hashcat', 'netsh', 'hcxpcapngtool']
+    }
+    
+    tools = required_tools.get(PLATFORM, [])
+    missing = []
+    
+    for tool in tools:
+        if PLATFORM == "darwin" and tool == "airport":
+            # Special case for airport on macOS
+            if not os.path.exists('/System/Library/PrivateFrameworks/Apple80211.framework/Versions/Current/Resources/airport'):
+                missing.append(tool)
+            continue
+        
+        if PLATFORM == "darwin" and tool == "zizzania":
+            # Special case for zizzania on macOS
+            if not os.path.exists(expanduser('~/zizzania/src/zizzania')):
+                missing.append(tool)
+            continue
+            
+        try:
+            if PLATFORM == "windows":
+                # Windows-specific check
+                subprocess.run(['where', tool], check=True, capture_output=True)
+            else:
+                # Unix-like systems
+                subprocess.run(['which', tool], check=True, capture_output=True)
+        except subprocess.CalledProcessError:
+            missing.append(tool)
+    
+    if missing:
+        print(f"Missing required tools: {', '.join(missing)}")
+        print("\nInstallation instructions:")
+        if PLATFORM == "darwin":
+            print("Run: brew install hashcat libpcap wget hcxtools")
+            print("For zizzania: git clone https://github.com/cyrus-and/zizzania && cd zizzania && make")
+        elif PLATFORM == "linux":
+            print("Run: sudo apt-get install wireless-tools hashcat hcxtools libpcap-dev")
+        else:
+            print("Please check the README for Windows installation instructions")
+        sys.exit(1)
+    else:
+        print("All required tools are installed")
+        sys.exit(0)
+
+if args.check_deps:
+    check_dependencies()
 
 def scan_networks():
     print('Scanning for networks...\n')
@@ -229,7 +285,50 @@ def crack_capture(ssid):
         print('\nRun hashcat against: '+str(ssid)+'.hc22000')
 
 
-f = Figlet(font='big')
-print('\n' + f.renderText('WiFiCrackPy'))
+def check_existing_captures(ssid):
+    required_files = [f"{ssid}.hc22000", f"{ssid}.pcap"]
+    missing = [f for f in required_files if not os.path.exists(f)]
+    
+    if missing:
+        print(f"Missing required files for {ssid}: {', '.join(missing)}")
+        return False
+    return True
 
-scan_networks()
+def list_available_captures():
+    """List all SSIDs that have both .hc22000 and .pcap files"""
+    hc_files = set(f.replace('.hc22000', '') for f in glob.glob('*.hc22000'))
+    pcap_files = set(f.replace('.pcap', '') for f in glob.glob('*.pcap'))
+    
+    available_ssids = hc_files.intersection(pcap_files)
+    
+    if not available_ssids:
+        print("No existing captures found")
+        return None
+    
+    print("\nAvailable captures:")
+    for idx, ssid in enumerate(available_ssids, 1):
+        print(f"{idx}. {ssid}")
+    
+    choice = input("\nEnter number to resume cracking (or press Enter to exit): ")
+    if choice.isdigit() and 1 <= int(choice) <= len(available_ssids):
+        return list(available_ssids)[int(choice) - 1]
+    return None
+
+# Modify main execution
+if __name__ == "__main__":
+    f = Figlet(font='big')
+    print('\n' + f.renderText('WiFiCrackPy'))
+
+    if args.resume:
+        if isinstance(args.resume, bool):
+            # No SSID provided, list available ones
+            ssid = list_available_captures()
+            if ssid:
+                crack_capture(ssid)
+        else:
+            # SSID provided as argument
+            if check_existing_captures(args.resume):
+                print(f"\nResuming with existing capture for {args.resume}")
+                crack_capture(args.resume)
+    else:
+        scan_networks()

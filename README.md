@@ -68,6 +68,7 @@ The script is fairly easy to use, simply run it using the command above and ente
 | `-d` | Deauthentication: Activates zizzania's deauthentication feature to force a handshake (do not misuse) |
 | `--dry-run` | Run with dummy data and mocked system commands |
 | `--check-deps` | Check required external tools and exit |
+| `--resume [ssid]` | Resume cracking with existing capture files. If no SSID provided, lists available captures |
 
 After running the script, you will be asked to choose a network to crack
 
