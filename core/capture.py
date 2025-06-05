@@ -18,8 +18,13 @@ class HandshakeCapturer:
         channel = network['channel']
         print_progress(f"Preparing to capture handshake for {ssid} ({bssid}) on channel {channel}")
 
-        pcap_file = f"results/{ssid.replace(' ', '_')}.pcap"
-        hc22000_file = f"results/{ssid.replace(' ', '_')}.hc22000"
+        # Create directory for this SSID's captures
+        ssid_name = ssid.replace(' ', '_')
+        capture_dir = f"captures/{ssid_name}"
+        os.makedirs(capture_dir, exist_ok=True)
+
+        pcap_file = f"{capture_dir}/{ssid_name}.pcap"
+        hc22000_file = f"{capture_dir}/{ssid_name}.hc22000"
 
         if self.os == "darwin":
             zizzania = os.path.expanduser('~/zizzania/src/zizzania')
@@ -29,7 +34,7 @@ class HandshakeCapturer:
             if shutil.which('zizzania'):
                 self.runner(['sudo', 'zizzania', '-i', self.interface, '-b', bssid, '-q', '-w', pcap_file])
             else:
-                self.runner(['sudo', 'tcpdump', '-i', self.interface, '-w', pcap_file, 'ether proto 0x888e']) # 802.1X packets
+                self.runner(['sudo', 'tcpdump', '-i', self.interface, '-w', pcap_file, 'ether proto 0x888e'])
         elif self.os == "windows":
             self.runner(['dumpcap', '-i', self.interface, '-w', pcap_file])
         else:

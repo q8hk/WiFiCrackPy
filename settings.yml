@@ -1,7 +1,7 @@
 # Tool paths
 paths:
   hashcat: "hashcat"  # Default assumes hashcat is in PATH
-  wordlists: "C:/Tools/SecLists/Passwords"  # Default SecLists location
+  wordlists: "/usr/local/Cellar/SecLists/Passwords/"  # Default SecLists location
   hcxtools: "hcxpcapngtool"  # Default assumes hcxtools is in PATH
 
 # Attack settings
