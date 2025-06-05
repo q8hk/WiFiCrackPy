@@ -9,7 +9,16 @@ from os.path import expanduser
 from pyfiglet import Figlet
 import os
 import glob
-from core.utils import find_seclists_wordlist, prompt_download_seclists
+import json
+from pathlib import Path
+from core.utils import (
+    find_seclists_wordlist,
+    prompt_download_seclists,
+    find_seclists_file,
+    print_progress,
+)
+from core.settings import Settings
+import low_hanging_fruit as lhf
 
 # Platform specific configurations
 PLATFORM = platform.system().lower()
@@ -261,7 +270,13 @@ def capture_network(bssid, ssid, channel):
 
 def crack_capture(ssid):
     if args.m is None:
-        print(tabulate([[1, 'Dictionary'], [2, 'Brute-force'], [3, 'Manual']], headers=['Number', 'Mode']))
+        options = [
+            [1, 'Dictionary'],
+            [2, 'Brute-force'],
+            [3, 'Manual'],
+            [4, 'Low hanging fruit']
+        ]
+        print(tabulate(options, headers=['Number', 'Mode']))
         method = int(input('\nSelect an attack mode: '))
     else:
         method = int(args.m)
@@ -289,8 +304,79 @@ def crack_capture(ssid):
         else:
             pattern = args.p
         subprocess.run(['sudo','hashcat', '-m', '22000', '-a', '3', str(ssid)+'.hc22000', pattern] + ['-O'] * args.o)
+    elif method == 4:
+        low_hanging_fruit_attack(f"{ssid}.hc22000")
     else:
         print('\nRun hashcat against: '+str(ssid)+'.hc22000')
+
+
+def low_hanging_fruit_attack(hcfile):
+    """Run the low hanging fruit attack stages."""
+    settings = Settings()
+    hashcat = settings.hashcat_path
+    wordlist = lhf.locate_wordlist(None)
+    if not wordlist:
+        print('WiFi-WPA wordlist not found')
+        return
+
+    progress_path = Path(f"results/lhf_progress_{Path(hcfile).stem}.json")
+    progress_path.parent.mkdir(exist_ok=True)
+    progress = {'stage': 0}
+    if progress_path.exists():
+        progress = json.loads(progress_path.read_text())
+
+    stages = [
+        {
+            'name': 'wordlist',
+            'session': 'lhf_dict',
+            'cmd': [hashcat, '-m', '22000', '-a', '0', hcfile, wordlist,
+                    '-r', 'best64.rule', '--session', 'lhf_dict', '--potfile-path', 'results/hashcat.potfile']
+        },
+        {
+            'name': 'bf8',
+            'session': 'lhf_bf8',
+            'cmd': [hashcat, '-m', '22000', '-a', '3', hcfile,
+                    '?d?d?d?d?d?d?d?d', '--session', 'lhf_bf8', '--potfile-path', 'results/hashcat.potfile']
+        },
+        {
+            'name': 'bf9',
+            'session': 'lhf_bf9',
+            'cmd': [hashcat, '-m', '22000', '-a', '3', hcfile,
+                    '?d?d?d?d?d?d?d?d?d', '--session', 'lhf_bf9', '--potfile-path', 'results/hashcat.potfile']
+        },
+        {
+            'name': 'bf10',
+            'session': 'lhf_bf10',
+            'cmd': [hashcat, '-m', '22000', '-a', '3', hcfile,
+                    '?d?d?d?d?d?d?d?d?d?d', '--session', 'lhf_bf10', '--potfile-path', 'results/hashcat.potfile']
+        },
+        {
+            'name': 'bf11',
+            'session': 'lhf_bf11',
+            'cmd': [hashcat, '-m', '22000', '-a', '3', hcfile,
+                    '?d?d?d?d?d?d?d?d?d?d?d', '--session', 'lhf_bf11', '--potfile-path', 'results/hashcat.potfile']
+        },
+        {
+            'name': 'bf12',
+            'session': 'lhf_bf12',
+            'cmd': [hashcat, '-m', '22000', '-a', '3', hcfile,
+                    '?d?d?d?d?d?d?d?d?d?d?d?d', '--session', 'lhf_bf12', '--potfile-path', 'results/hashcat.potfile']
+        },
+    ]
+
+    for idx in range(progress.get('stage', 0), len(stages)):
+        stage = stages[idx]
+        print_progress(f"Starting {stage['name']} stage")
+        lhf.run_hashcat(stage['cmd'], stage['session'])
+        if lhf.is_cracked(hcfile, hashcat):
+            print_progress(f"Password found during {stage['name']} stage!")
+            progress['stage'] = len(stages)
+            progress_path.write_text(json.dumps(progress))
+            return
+        progress['stage'] = idx + 1
+        progress_path.write_text(json.dumps(progress))
+
+    print_progress('All stages completed without success')
 
 
 def check_existing_captures(ssid):

@@ -79,6 +79,8 @@ Following the selection of a network, you may have to wait for a while for a han
 
 Once a handshake is captured, `hashcat` can be used to crack the Wi-Fi password. This step may take quite a while depending on several factors including your Mac's processing power and the attack method chosen. If successful, you will be presented with the password for the target network.
 
+The script offers four attack modes: dictionary, brute-force, **low hanging fruit** (a short sequence of common wordlist and numeric masks), and manual.
+
 WiFiCrackPy retains the handshake in its directory if you would like to perform another type of attack against the capture.
 
 ### Dry run example
