@@ -48,7 +48,9 @@ git clone https://github.com/phenotypic/WiFiCrackPy.git
 pip3 install -r requirements.txt
 ```
 
-The default wordlist setting assumes `rockyou.txt` resides in `C:/Tools/SecLists/Passwords`. If this file isn't present, edit `settings.yml` or use the `-w` flag to provide your own list.
+The default wordlist setting assumes `rockyou.txt` resides in `C:/Tools/SecLists/Passwords`.
+If no wordlist is supplied with `-w`, the script now attempts to locate SecLists automatically and, if not found, offers to download a shallow copy for you.
+You can still edit `settings.yml` or manually provide a path with the `-w` flag.
 
 Run from the same directory with:
 ```

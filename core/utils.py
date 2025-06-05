@@ -3,6 +3,8 @@ import shutil
 import sys
 from datetime import datetime
 import os
+import platform
+import subprocess
 
 def print_disclaimer():
     disclaimer = """
@@ -69,3 +71,43 @@ def color(text, color_code):
 
 def print_progress(message):
     print(color(f"[+] {message}", "92"))
+
+
+def find_seclists_wordlist(filename="rockyou.txt"):
+    """Attempt to locate a common SecLists wordlist."""
+    common_dirs = [
+        "/usr/share/wordlists",
+        "/usr/share/seclists/Passwords",
+        "/usr/local/share/seclists/Passwords",
+        "/opt/seclists/Passwords",
+        os.path.expanduser("~/SecLists/Passwords"),
+    ]
+    os_name = platform.system().lower()
+    if os_name == "darwin":
+        common_dirs.append("/opt/homebrew/share/seclists/Passwords")
+    elif os_name == "windows":
+        common_dirs.extend([
+            r"C:\\Tools\\SecLists\\Passwords",
+            r"C:\\SecLists\\Passwords",
+        ])
+
+    for base in common_dirs:
+        path = os.path.join(base, filename)
+        if os.path.exists(path):
+            return path
+    return None
+
+
+def prompt_download_seclists(dest="SecLists"):
+    """Offer to clone a shallow copy of SecLists and return rockyou path."""
+    ans = input("rockyou.txt not found. Download SecLists now? [y/N]: ")
+    if ans.strip().lower().startswith("y"):
+        repo = "https://github.com/danielmiessler/SecLists.git"
+        try:
+            subprocess.run(["git", "clone", "--depth", "1", repo, dest], check=True)
+            for root, _, files in os.walk(dest):
+                if "rockyou.txt" in files:
+                    return os.path.join(root, "rockyou.txt")
+        except subprocess.CalledProcessError:
+            print("Failed to clone SecLists repository.")
+    return None

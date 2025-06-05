@@ -9,6 +9,7 @@ from os.path import expanduser
 from pyfiglet import Figlet
 import os
 import glob
+from core.utils import find_seclists_wordlist, prompt_download_seclists
 
 # Platform specific configurations
 PLATFORM = platform.system().lower()
@@ -265,10 +266,17 @@ def crack_capture(ssid):
     else:
         method = int(args.m)
 
-    if method == 1 and args.w is None:
-        wordlist = input('\nInput a wordlist path: ')
-    elif method == 1 and args.w is not None:
-        wordlist = args.w
+    if method == 1:
+        if args.w is not None:
+            wordlist = args.w
+        else:
+            wordlist = find_seclists_wordlist()
+            if wordlist:
+                print(f"Using detected wordlist: {wordlist}")
+            else:
+                wordlist = prompt_download_seclists()
+                if not wordlist:
+                    wordlist = input('\nInput a wordlist path: ')
 
     if method == 1 and (args.r is None):
         subprocess.run(['sudo','hashcat', '-m', '22000', str(ssid)+'.hc22000', wordlist] + ['-O'] * args.o)
