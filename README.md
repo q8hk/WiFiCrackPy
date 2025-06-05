@@ -49,7 +49,8 @@ pip3 install -r requirements.txt
 ```
 
 The default wordlist setting assumes `rockyou.txt` resides in `C:/Tools/SecLists/Passwords`.
-If no wordlist is supplied with `-w`, the script now attempts to locate SecLists automatically and, if not found, offers to download a shallow copy for you.
+If no wordlist is supplied with `-w`, the script first checks the path configured in `settings.yml` or a directory specified via the `SECLISTS_DIR` environment variable.
+If the wordlist cannot be located, the script attempts common system locations and finally offers to download a shallow copy of SecLists for you.
 You can still edit `settings.yml` or manually provide a path with the `-w` flag.
 
 Run from the same directory with:

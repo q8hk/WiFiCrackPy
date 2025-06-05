@@ -75,6 +75,25 @@ def print_progress(message):
 
 def find_seclists_wordlist(filename="rockyou.txt"):
     """Attempt to locate a common SecLists wordlist."""
+    # 1) Environment variable takes priority
+    env_dir = os.environ.get("SECLISTS_DIR")
+    if env_dir:
+        candidate = os.path.join(env_dir, filename)
+        if os.path.exists(candidate):
+            return candidate
+
+    # 2) Check configured path from settings.yml
+    try:
+        from core.settings import Settings
+        settings = Settings()
+        cfg_candidate = os.path.join(settings.wordlists_path, filename)
+        if os.path.exists(cfg_candidate):
+            return cfg_candidate
+    except Exception:
+        # Settings may not be initialised correctly - ignore
+        pass
+
+    # 3) Fallback to common system locations
     common_dirs = [
         "/usr/share/wordlists",
         "/usr/share/seclists/Passwords",
