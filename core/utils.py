@@ -130,3 +130,44 @@ def prompt_download_seclists(dest="SecLists"):
         except subprocess.CalledProcessError:
             print("Failed to clone SecLists repository.")
     return None
+
+
+def find_seclists_file(relative_path):
+    """Locate a file within the SecLists Passwords directory."""
+    env_dir = os.environ.get("SECLISTS_DIR")
+    if env_dir:
+        candidate = os.path.join(env_dir, relative_path)
+        if os.path.exists(candidate):
+            return candidate
+
+    try:
+        from core.settings import Settings
+        settings = Settings()
+        cfg_candidate = os.path.join(settings.wordlists_path, relative_path)
+        if os.path.exists(cfg_candidate):
+            return cfg_candidate
+    except Exception:
+        pass
+
+    common_dirs = [
+        "/usr/share/wordlists",
+        "/usr/share/seclists/Passwords",
+        "/usr/local/share/seclists/Passwords",
+        "/opt/seclists/Passwords",
+        os.path.expanduser("~/SecLists/Passwords"),
+    ]
+
+    os_name = platform.system().lower()
+    if os_name == "darwin":
+        common_dirs.append("/opt/homebrew/share/seclists/Passwords")
+    elif os_name == "windows":
+        common_dirs.extend([
+            r"C:\\Tools\\SecLists\\Passwords",
+            r"C:\\SecLists\\Passwords",
+        ])
+
+    for base in common_dirs:
+        candidate = os.path.join(base, relative_path)
+        if os.path.exists(candidate):
+            return candidate
+    return None
