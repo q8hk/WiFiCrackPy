@@ -1,10 +1,12 @@
 # core/utils.py
-import shutil
-import sys
-from datetime import datetime
+import json
 import os
 import platform
+import re
+import shutil
 import subprocess
+import sys
+from datetime import datetime
 
 def print_disclaimer():
     disclaimer = """
@@ -71,6 +73,58 @@ def color(text, color_code):
 
 def print_progress(message):
     print(color(f"[+] {message}", "92"))
+
+
+def sanitize_identifier(value: str) -> str:
+    if not value:
+        return "unknown"
+    sanitized = re.sub(r"[^A-Za-z0-9]+", "_", value).strip("_")
+    return sanitized or "unknown"
+
+
+def format_recon_value(value):
+    if value is None:
+        return "N/A"
+    if isinstance(value, str) and not value.strip():
+        return "N/A"
+    return str(value)
+
+
+def build_recon_report(tool_name: str, tool_version: str, target: dict, argv: list, timestamp=None) -> str:
+    now = timestamp or datetime.now()
+    header_lines = [
+        f"Tool: {tool_name} {tool_version}".strip(),
+        f"Timestamp: {now.isoformat(sep=' ', timespec='seconds')}",
+        f"Platform: {platform.platform()}",
+        f"Command: {' '.join(argv)}",
+        "",
+        "Target Information:",
+    ]
+
+    target_lines = []
+    for key in sorted(target.keys()):
+        target_lines.append(f"{key} = {format_recon_value(target.get(key))}")
+
+    json_block = json.dumps(target, indent=2, sort_keys=True)
+    footer_lines = [
+        "",
+        "Raw JSON:",
+        json_block,
+    ]
+    return "\n".join(header_lines + target_lines + footer_lines) + "\n"
+
+
+def write_recon_log(target: dict, argv: list, tool_name="WiFiCrackPy", tool_version="") -> str:
+    timestamp = datetime.now()
+    identifier = sanitize_identifier(target.get("ssid") or target.get("bssid") or "target")
+    filename = f"recon_{identifier}_{timestamp.strftime('%Y%m%d-%H%M%S')}.log"
+    logs_dir = "logs"
+    os.makedirs(logs_dir, exist_ok=True)
+    path = os.path.join(logs_dir, filename)
+    report = build_recon_report(tool_name, tool_version, target, argv, timestamp=timestamp)
+    with open(path, "w", encoding="utf-8") as handle:
+        handle.write(report)
+    return path
 
 
 def find_seclists_wordlist(filename="rockyou.txt"):
