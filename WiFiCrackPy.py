@@ -3,7 +3,6 @@ import subprocess
 import platform
 import re
 import argparse  # Add this import
-from prettytable import PrettyTable
 from tabulate import tabulate
 from os.path import expanduser
 from pyfiglet import Figlet
@@ -16,6 +15,8 @@ from core.utils import (
     prompt_download_seclists,
     find_seclists_file,
     print_progress,
+    write_recon_log,
+    build_recon_report,
 )
 from core.settings import Settings
 import low_hanging_fruit as lhf
@@ -51,17 +52,21 @@ class PlatformConfig:
 
 config = PlatformConfig()
 
-parser = argparse.ArgumentParser()
-parser.add_argument('-w')
-parser.add_argument('-m')
-parser.add_argument('-i')
-parser.add_argument('-p')
-parser.add_argument('-d', action='store_false')
-parser.add_argument('-o', action='store_true')
-parser.add_argument('-r')
-parser.add_argument('--check-deps', action='store_true', help='Check required external tools and exit')
-parser.add_argument('--resume', nargs='?', const=True, help='Resume cracking with existing capture files. If no SSID provided, lists available captures')
-args = parser.parse_args()
+
+def build_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-w', help='Wordlist: Define a wordlist path')
+    parser.add_argument('-m', help='Method: Define the attack method')
+    parser.add_argument('-i', help='Interface: Set Wi-Fi interface')
+    parser.add_argument('-p', help='Pattern: Define a brute-force pattern')
+    parser.add_argument('-d', action='store_false', help='Deauthentication: Force handshake capture')
+    parser.add_argument('-o', action='store_true', help='Optimised: Enable optimised kernels')
+    parser.add_argument('-R', '--rule', help='Rules: Supply a hashcat rule file')
+    parser.add_argument('-r', '--recon', action='store_true', help='Recon mode (information gathering only)')
+    parser.add_argument('--target', help='Target network identifier (index, SSID, or BSSID)')
+    parser.add_argument('--check-deps', action='store_true', help='Check required external tools and exit')
+    parser.add_argument('--resume', nargs='?', const=True, help='Resume cracking with existing capture files. If no SSID provided, lists available captures')
+    return parser
 
 def check_dependencies():
     """Check for required external tools based on platform"""
@@ -112,42 +117,45 @@ def check_dependencies():
         print("All required tools are installed")
         sys.exit(0)
 
-if args.check_deps:
-    check_dependencies()
+def scan_networks(target=None):
+    while True:
+        print('Scanning for networks...\n')
 
-def scan_networks():
-    print('Scanning for networks...\n')
-    
-    try:
-        if PLATFORM == "windows":
-            scan = subprocess.run(config.scan_cmd, capture_output=True, text=True)
-            networks = parse_windows_networks(scan.stdout)
-        elif PLATFORM == "linux":
-            scan = subprocess.run(config.scan_cmd, capture_output=True, text=True)
-            networks = parse_linux_networks(scan.stdout)
-            print(networks)
-        else:  # macOS - keep original parsing
-            scan = subprocess.run(config.scan_cmd, stdout=subprocess.PIPE)
-            scan = scan.stdout.decode('utf-8').split('\n')
-            networks = parse_macos_networks(scan)
-            
-        display_networks(networks)
-        return handle_network_selection(networks)
-            
-    except subprocess.CalledProcessError as e:
-        print(f"Error scanning networks: {e}")
-        return None
+        try:
+            if PLATFORM == "windows":
+                scan = subprocess.run(config.scan_cmd, capture_output=True, text=True)
+                networks = parse_windows_networks(scan.stdout)
+            elif PLATFORM == "linux":
+                scan = subprocess.run(config.scan_cmd, capture_output=True, text=True)
+                networks = parse_linux_networks(scan.stdout)
+            else:  # macOS - keep original parsing
+                scan = subprocess.run(config.scan_cmd, stdout=subprocess.PIPE)
+                scan = scan.stdout.decode('utf-8').split('\n')
+                networks = parse_macos_networks(scan)
+
+            display_networks(networks)
+            if not networks:
+                return None
+
+            selected = select_network(networks, target)
+            if selected is None:
+                if target:
+                    return None
+                continue
+            return selected
+
+        except subprocess.CalledProcessError as e:
+            print(f"Error scanning networks: {e}")
+            return None
 
 def parse_windows_networks(output):
-    networks = {}
+    networks = []
     current_network = {}
-    index = 1
-    
+
     for line in output.split('\n'):
         if "SSID" in line and "BSSID" not in line:
             if current_network:
-                networks[index] = current_network.copy()
-                index += 1
+                networks.append(current_network.copy())
                 current_network = {}
             current_network['ssid'] = line.split(': ')[1].strip()
         elif "BSSID" in line:
@@ -158,21 +166,20 @@ def parse_windows_networks(output):
             current_network['channel'] = line.split(': ')[1].strip()
         elif "Authentication" in line:
             current_network['security'] = line.split(': ')[1].strip()
-    
+
     if current_network:
-        networks[index] = current_network
-    
+        networks.append(current_network)
+
     return networks
 
 def parse_linux_networks(output):
-    networks = {}
-    index = 1
-    
+    networks = []
+
     cells = output.split('Cell ')
     for cell in cells[1:]:  # Skip first empty element
         lines = cell.split('\n')
         network = {}
-        
+
         for line in lines:
             if "ESSID" in line:
                 network['ssid'] = line.split(':')[1].strip().strip('"')
@@ -184,21 +191,24 @@ def parse_linux_networks(output):
                 network['rssi'] = line.split('=')[1].split()[0]
             elif "Encryption" in line:
                 network['security'] = line.split(':')[1].strip()
-        
+
         if network:
-            networks[index] = network
-            index += 1
-    
+            networks.append(network)
+
     return networks
 
 def parse_macos_networks(scan_output):
-    networks = {}
+    networks = []
     count = len(scan_output) - 1
     scan_output = [o.split() for o in scan_output]
 
-    list = PrettyTable(['Number', 'Name', 'BSSID', 'RSSI', 'Channel', 'Security'])
     for i in range(1, count):
-        bssid = re.search('([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})', ' '.join(scan_output[i])).group(0)
+        if not scan_output[i]:
+            continue
+        try:
+            bssid = re.search('([0-9A-Fa-f]{2}[:]){5}([0-9A-Fa-f]{2})', ' '.join(scan_output[i])).group(0)
+        except AttributeError:
+            continue
         bindex = scan_output[i].index(bssid)
 
         network = {}
@@ -207,37 +217,46 @@ def parse_macos_networks(scan_output):
         network['rssi'] = scan_output[i][bindex + 1]
         network['channel'] = scan_output[i][bindex + 2].split(',')[0]
         network['security'] = scan_output[i][bindex + 5].split('(')[0]
+        networks.append(network)
 
-        networks[i] = network
-        list.add_row([i, network['ssid'], network['bssid'], network['rssi'], network['channel'], network['security']])
-
-    print(list)
-
-    x = input('\nSelect a network to crack - (or press r to refresh): ')
-    if x == 'r':
-        scan_networks()
-    else:
-        x = int(x)
-    return networks[x]
+    return networks
 
 def display_networks(networks):
-    if PLATFORM == "windows":
-        # Windows-specific display logic if needed
-        pass
-    elif PLATFORM == "linux":
-        # Linux-specific display logic if needed
-        pass
-    else:
-        # Default (macOS) display logic
-        pass
+    rows = []
+    for idx, network in enumerate(networks, 1):
+        rows.append([
+            idx,
+            network.get('ssid', 'N/A'),
+            network.get('bssid', 'N/A'),
+            network.get('rssi', 'N/A'),
+            network.get('channel', 'N/A'),
+            network.get('security', 'N/A'),
+        ])
+    print(tabulate(rows, headers=['Number', 'Name', 'BSSID', 'RSSI', 'Channel', 'Security']))
 
-def handle_network_selection(selected_network):
-    bssid = selected_network['bssid']
-    ssid = selected_network['ssid']
-    channel = selected_network['channel']
-    capture_network(bssid, ssid, channel)
 
-def capture_network(bssid, ssid, channel):
+def select_network(networks, target=None):
+    if target:
+        if str(target).isdigit():
+            index = int(target)
+            if 1 <= index <= len(networks):
+                return networks[index - 1]
+            return None
+        lowered = str(target).lower()
+        for network in networks:
+            if str(network.get('ssid', '')).lower() == lowered or str(network.get('bssid', '')).lower() == lowered:
+                return network
+        return None
+
+    choice = input('\nSelect a network to crack - (or press r to refresh): ')
+    if choice.lower() == 'r':
+        return None
+    if choice.isdigit() and 1 <= int(choice) <= len(networks):
+        return networks[int(choice) - 1]
+    print("Invalid selection.")
+    return None
+
+def capture_network(args, bssid, ssid, channel):
     subprocess.run(config.reset_cmd)
     subprocess.run(config.channel_cmd(channel))
 
@@ -265,10 +284,10 @@ def capture_network(bssid, ssid, channel):
     subprocess.run(['hcxpcapngtool', '-o', f'{ssid}.hc22000', f'{ssid}.pcap'], stdout=subprocess.PIPE)
     
     print('\nHandshake ready for cracking...\n')
-    crack_capture(ssid)
+    crack_capture(args, ssid)
 
 
-def crack_capture(ssid):
+def crack_capture(args, ssid):
     if args.m is None:
         options = [
             [1, 'Dictionary'],
@@ -293,10 +312,10 @@ def crack_capture(ssid):
                 if not wordlist:
                     wordlist = input('\nInput a wordlist path: ')
 
-    if method == 1 and (args.r is None):
+    if method == 1 and (args.rule is None):
         subprocess.run(['sudo','hashcat', '-m', '22000', str(ssid)+'.hc22000', wordlist] + ['-O'] * args.o)
-    elif method == 1 and (args.r is not None):
-        rule = args.r
+    elif method == 1 and (args.rule is not None):
+        rule = args.rule
         subprocess.run(['sudo','hashcat', '-m', '22000', str(ssid)+'.hc22000','-r', str(rule), wordlist] + ['-O'] * args.o)
     elif method == 2:
         if args.p is None:
@@ -409,20 +428,55 @@ def list_available_captures():
     return None
 
 # Modify main execution
-if __name__ == "__main__":
+def run_recon(args, network):
+    report = build_recon_report("WiFiCrackPy", "", network, sys.argv)
+    print(report)
+    log_path = write_recon_log(network, sys.argv, tool_name="WiFiCrackPy", tool_version="")
+    print_progress(f"Recon log saved to {log_path}")
+
+
+def main(argv=None):
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    if args.recon and any([args.w, args.m, args.p, args.o, args.rule, args.resume, args.d is False]):
+        print("Error: --recon cannot be combined with attack flags like -w, -m, -p, -o, -d, --rule, or --resume.")
+        return 2
+
     f = Figlet(font='big')
     print('\n' + f.renderText('WiFiCrackPy'))
+
+    if args.check_deps:
+        check_dependencies()
+        return 0
+
+    if args.recon:
+        network = scan_networks(target=args.target)
+        if not network:
+            print("Target not found. Provide a valid --target or select one from the scan list.")
+            return 1
+        run_recon(args, network)
+        return 0
 
     if args.resume:
         if isinstance(args.resume, bool):
             # No SSID provided, list available ones
             ssid = list_available_captures()
             if ssid:
-                crack_capture(ssid)
+                crack_capture(args, ssid)
         else:
             # SSID provided as argument
             if check_existing_captures(args.resume):
                 print(f"\nResuming with existing capture for {args.resume}")
-                crack_capture(args.resume)
+                crack_capture(args, args.resume)
     else:
-        scan_networks()
+        selected_network = scan_networks(target=args.target)
+        if not selected_network:
+            print("Target not found. Provide a valid --target or select one from the scan list.")
+            return 1
+        capture_network(args, selected_network['bssid'], selected_network['ssid'], selected_network['channel'])
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

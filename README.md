@@ -63,12 +63,14 @@ The script is fairly easy to use, simply run it using the command above and ente
 | Flag | Description |
 | --- | --- |
 | `-w <wordlist>` | Wordlist: Define a wordlist path (script will prompt you otherwise) |
-| `-r <rule-file>` | Rules: Supply a hashcat rule file for wordlist transformations |
+| `-r`, `--recon` | Recon: Gather target information only (no attack) |
+| `-R <rule-file>`, `--rule <rule-file>` | Rules: Supply a hashcat rule file for wordlist transformations |
 | `-i <interface>` | Interface: Set Wi-Fi interface (script can auto-detect default interface) |
 | `-m <method>` | Method: Define the attack method (script will prompt you otherwise) |
 | `-p <pattern>` | Pattern: Define a brute-force pattern in advance (script will prompt you if required) |
 | `-o` | Optimised: Enable optimised kernels for `hashcat` |
 | `-d` | Deauthentication: Activates zizzania's deauthentication feature to force a handshake (do not misuse) |
+| `--target <id>` | Target: Select a target by index, SSID, or BSSID |
 | `--dry-run` | Run with dummy data and mocked system commands |
 | `--check-deps` | Check required external tools and exit |
 | `--resume [ssid]` | Resume cracking with existing capture files. If no SSID provided, lists available captures |
@@ -81,6 +83,13 @@ Once a handshake is captured, `hashcat` can be used to crack the Wi-Fi password.
 
 The script offers four attack modes: dictionary, brute-force, **low hanging fruit** (a short sequence of common wordlist and numeric masks), and manual.
 
+Recon examples:
+
+```
+python3 WiFiCrackPy.py -r --target <id>
+python3 WiFiCrackPy.py --recon --target <id>
+```
+
 WiFiCrackPy retains the handshake in its directory if you would like to perform another type of attack against the capture.
 
 ### Dry run example
@@ -92,4 +101,3 @@ python3 WiFiCrackPy.py --dry-run
 ```
 
 This uses dummy network data and prints the commands that would normally be executed.
-
